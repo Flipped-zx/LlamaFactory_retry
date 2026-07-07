@@ -40,6 +40,39 @@ class DatasetConverter:
     dataset_attr: "DatasetAttr"
     data_args: "DataArguments"
 
+    def _parse_turn_mask(self, value: Any) -> bool:
+        r"""Parse a per-message turn mask value from common JSON scalar forms."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            value = value.strip().lower()
+            if value in {"true", "1", "yes", "y"}:
+                return True
+            if value in {"false", "0", "no", "n", ""}:
+                return False
+
+        return bool(value)
+
+    def _get_message_turn_mask(self, message: dict[str, Any]) -> bool:
+        r"""Read the raw dataset message-level turn mask, defaulting to False when absent."""
+        turn_mask_tag = self.dataset_attr.turn_mask_tag
+        if turn_mask_tag and turn_mask_tag in message:
+            return self._parse_turn_mask(message[turn_mask_tag])
+
+        if self.data_args.turn_mask:
+            logger.debug("Missing `turn_mask` in assistant message. Defaulting to False.")
+
+        return False
+
+    def _get_turn_masks(self, messages: list[dict[str, Any]]) -> list[bool]:
+        r"""Collect one mask per assistant/function target turn in an aligned conversation."""
+        target_roles = {Role.ASSISTANT.value, Role.FUNCTION.value}
+        return [
+            self._parse_turn_mask(message.get("turn_mask", False))
+            for message in messages
+            if message["role"] in target_roles
+        ]
+
     def _find_medias(self, medias: Union["MediaType", list["MediaType"], None]) -> list["MediaType"] | None:
         r"""Optionally concatenate media path to media dir when loading from local disk."""
         if medias is None:
@@ -122,6 +155,7 @@ class AlpacaDatasetConverter(DatasetConverter):
         output = {
             "_prompt": prompt,
             "_response": response,
+            "_turn_mask": self._get_turn_masks(prompt + response),
             "_system": example[self.dataset_attr.system] if self.dataset_attr.system else "",
             "_tools": example[self.dataset_attr.tools] if self.dataset_attr.tools else "",
             "_images": self._find_medias(example[self.dataset_attr.images]) if self.dataset_attr.images else None,
@@ -156,19 +190,25 @@ class SharegptDatasetConverter(DatasetConverter):
             system = example[self.dataset_attr.system] if self.dataset_attr.system else ""
 
         aligned_messages = []
+        aligned_turn_masks = []
         broken_data = False
         for turn_idx, message in enumerate(messages):
-            if message[self.dataset_attr.role_tag] not in accept_tags[turn_idx % 2]:
+            role_tag = message[self.dataset_attr.role_tag]
+            if role_tag not in accept_tags[turn_idx % 2]:
                 logger.warning_rank0(f"Invalid role tag in {messages}.")
                 broken_data = True
                 break
 
             aligned_messages.append(
                 {
-                    "role": tag_mapping[message[self.dataset_attr.role_tag]],
+                    "role": tag_mapping[role_tag],
                     "content": message[self.dataset_attr.content_tag],
                 }
             )
+            if role_tag in even_tags:
+                aligned_turn_masks.append(
+                    self._get_message_turn_mask(message) if role_tag == self.dataset_attr.assistant_tag else False
+                )
 
         if (not self.dataset_attr.ranking and len(aligned_messages) % 2 != 0) or (
             self.dataset_attr.ranking and len(aligned_messages) % 2 == 0
@@ -179,13 +219,16 @@ class SharegptDatasetConverter(DatasetConverter):
         if broken_data:
             logger.warning_rank0("Skipping this abnormal example.")
             prompt, response = [], []
+            turn_masks = []
         elif self.dataset_attr.kto_tag and isinstance(example[self.dataset_attr.kto_tag], bool):  # kto example
             prompt = aligned_messages[:-1]
             response = aligned_messages[-1:]
             if example[self.dataset_attr.kto_tag]:
                 response = response + [{"role": Role.ASSISTANT.value, "content": ""}]
+                turn_masks = aligned_turn_masks + [False]
             else:
                 response = [{"role": Role.ASSISTANT.value, "content": ""}] + response
+                turn_masks = aligned_turn_masks[:-1] + [False] + aligned_turn_masks[-1:]
         elif (
             self.dataset_attr.ranking
             and isinstance(example[self.dataset_attr.chosen], dict)
@@ -211,13 +254,23 @@ class SharegptDatasetConverter(DatasetConverter):
                     "content": rejected[self.dataset_attr.content_tag],
                 },
             ]
+            turn_masks = aligned_turn_masks + [
+                self._get_message_turn_mask(chosen)
+                if chosen[self.dataset_attr.role_tag] == self.dataset_attr.assistant_tag
+                else False,
+                self._get_message_turn_mask(rejected)
+                if rejected[self.dataset_attr.role_tag] == self.dataset_attr.assistant_tag
+                else False,
+            ]
         else:  # normal example
             prompt = aligned_messages[:-1]
             response = aligned_messages[-1:]
+            turn_masks = aligned_turn_masks
 
         output = {
             "_prompt": prompt,
             "_response": response,
+            "_turn_mask": turn_masks,
             "_system": system,
             "_tools": example[self.dataset_attr.tools] if self.dataset_attr.tools else "",
             "_images": self._find_medias(example[self.dataset_attr.images]) if self.dataset_attr.images else None,
@@ -358,6 +411,7 @@ class OpenAIDatasetConverter(DatasetConverter):
         output = {
             "_prompt": prompt,
             "_response": response,
+            "_turn_mask": self._get_turn_masks(prompt + response),
             "_system": system,
             "_tools": tools,
             "_images": self._find_medias(example[self.dataset_attr.images]) if self.dataset_attr.images else None,
@@ -401,6 +455,7 @@ def align_dataset(
     Aligned dataset:
     _prompt: [{"role": "user", "content": "..."}] * (2T - 1)
     _response: [{"role": "assistant", "content": "..."}] * N (N > 1 for ranking dataset)
+    _turn_mask: [bool] * T
     _system: "..."
     _tools: "..."
     _images: []

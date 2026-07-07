@@ -53,6 +53,7 @@ class SupervisedDatasetProcessor(DatasetProcessor):
         self,
         prompt: list[dict[str, str]],
         response: list[dict[str, str]],
+        turn_mask: list[bool],
         system: Optional[str],
         tools: Optional[str],
         images: list["ImageInput"],
@@ -65,9 +66,12 @@ class SupervisedDatasetProcessor(DatasetProcessor):
         )
         discarding_history_cot = self.data_args.mask_history and not self.template.preserve_thinking
         encoded_pairs = self.template.encode_multiturn(self.tokenizer, messages, system, tools, discarding_history_cot)
+        turn_mask = turn_mask or []
+        turn_mask = turn_mask[: len(encoded_pairs)] + [False] * max(0, len(encoded_pairs) - len(turn_mask))
         total_length = len(input_ids) + (1 if self.template.efficient_eos else 0)
         if self.data_args.mask_history:
             encoded_pairs = encoded_pairs[::-1]  # high priority for last turns
+            turn_mask = turn_mask[::-1]
 
         for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
             if total_length >= self.data_args.cutoff_len:
@@ -87,7 +91,9 @@ class SupervisedDatasetProcessor(DatasetProcessor):
             else:
                 source_label = [IGNORE_INDEX] * source_len
 
-            if self.data_args.mask_history and turn_idx != 0:  # train on the last turn only
+            if self.data_args.turn_mask and turn_mask[turn_idx]:
+                target_label = [IGNORE_INDEX] * target_len
+            elif self.data_args.mask_history and turn_idx != 0:  # train on the last turn only
                 target_label = [IGNORE_INDEX] * target_len
             else:
                 target_label = target_ids
@@ -109,6 +115,7 @@ class SupervisedDatasetProcessor(DatasetProcessor):
         # build inputs with format `<bos> X Y <eos>` and labels with format `<ignore> ... <ignore> Y <eos>`
         # for multiturn examples, we only mask the prompt part in each prompt-response pair.
         model_inputs = defaultdict(list)
+        turn_masks = examples.get("_turn_mask", [[] for _ in range(len(examples["_prompt"]))])
         for i in range(len(examples["_prompt"])):
             if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
                 logger.warning_rank0(
@@ -119,6 +126,7 @@ class SupervisedDatasetProcessor(DatasetProcessor):
             input_ids, labels = self._encode_data_example(
                 prompt=examples["_prompt"][i],
                 response=examples["_response"][i],
+                turn_mask=turn_masks[i],
                 system=examples["_system"][i],
                 tools=examples["_tools"][i],
                 images=examples["_images"][i] or [],
@@ -152,6 +160,7 @@ class PackedSupervisedDatasetProcessor(SupervisedDatasetProcessor):
         batch_input_ids, batch_labels, batch_images, batch_videos, batch_audios = [], [], [], [], []
         lengths = []
         length2indexes = defaultdict(list)
+        turn_masks = examples.get("_turn_mask", [[] for _ in range(len(examples["_prompt"]))])
         for i in range(len(examples["_prompt"])):
             if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
                 logger.warning_rank0(
@@ -162,6 +171,7 @@ class PackedSupervisedDatasetProcessor(SupervisedDatasetProcessor):
             input_ids, labels = self._encode_data_example(
                 prompt=examples["_prompt"][i],
                 response=examples["_response"][i],
+                turn_mask=turn_masks[i],
                 system=examples["_system"][i],
                 tools=examples["_tools"][i],
                 images=examples["_images"][i] or [],

@@ -55,6 +55,10 @@ class DataArguments:
         default=False,
         metadata={"help": "Whether or not to mask the history and train on the last turn only."},
     )
+    turn_mask: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to respect per-assistant-message `turn_mask` fields in ShareGPT data."},
+    )
     streaming: bool = field(
         default=False,
         metadata={"help": "Enable dataset streaming."},
