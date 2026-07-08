@@ -87,9 +87,10 @@ class DatasetAttr:
         if "tags" in attr:
             tag_names = ["role_tag", "content_tag"]
             tag_names += ["user_tag", "assistant_tag", "observation_tag", "function_tag", "system_tag"]
-            tag_names += ["turn_mask_tag"]
             for tag in tag_names:
                 self.set_attr(tag, attr["tags"])
+
+            self.set_attr("turn_mask_tag", attr["tags"], default="turn_mask")
 
 
 def get_dataset_list(dataset_names: list[str] | None, dataset_dir: str | dict) -> list["DatasetAttr"]:

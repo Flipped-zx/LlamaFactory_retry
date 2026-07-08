@@ -15,6 +15,51 @@
       "messages": "conversations"
     }
   },
+  "geneval2_retry_masked_multiturn_sft_train": {
+    "file_name": "llamafactory/geneval2_retry_masked_multiturn_sft_train.jsonl",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages"
+    },
+    "tags": {
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt",
+      "system_tag": "system",
+      "turn_mask_tag": "turn_mask"
+    }
+  },
+  "geneval2_retry_masked_multiturn_sft_val": {
+    "file_name": "llamafactory/geneval2_retry_masked_multiturn_sft_val.jsonl",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages"
+    },
+    "tags": {
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt",
+      "system_tag": "system",
+      "turn_mask_tag": "turn_mask"
+    }
+  },
+  "geneval2_retry_masked_multiturn_sft_test": {
+    "file_name": "llamafactory/geneval2_retry_masked_multiturn_sft_test.jsonl",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages"
+    },
+    "tags": {
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt",
+      "system_tag": "system",
+      "turn_mask_tag": "turn_mask"
+    }
+  },
   "glaive_toolcall_en_demo": {
     "file_name": "glaive_toolcall_en_demo.json",
     "formatting": "sharegpt",

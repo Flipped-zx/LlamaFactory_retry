@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 from typing import TYPE_CHECKING, Literal, Optional, Union
 
@@ -46,6 +47,27 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+def _read_local_json(data_files: list[str], split: str) -> "Dataset":
+    r"""Read local JSON/JSONL files without relying on the pyarrow JSON reader."""
+    rows = []
+    for data_file in data_files:
+        if data_file.endswith(".jsonl"):
+            with open(data_file, encoding="utf-8") as f:
+                rows.extend(json.loads(line) for line in f if line.strip())
+        else:
+            with open(data_file, encoding="utf-8") as f:
+                data = json.load(f)
+
+            if isinstance(data, list):
+                rows.extend(data)
+            elif isinstance(data, dict) and isinstance(data.get(split), list):
+                rows.extend(data[split])
+            else:
+                raise ValueError(f"Unsupported JSON data format in {data_file}.")
+
+    return Dataset.from_list(rows, split=split)
 
 
 def _load_single_dataset(
@@ -127,6 +149,8 @@ def _load_single_dataset(
         )
     elif dataset_attr.load_from == "cloud_file":
         dataset = Dataset.from_list(read_cloud_json(data_path), split=dataset_attr.split)
+    elif dataset_attr.load_from == "file" and data_path == "json":
+        dataset = _read_local_json(data_files, split=dataset_attr.split)
     else:
         dataset = load_dataset(
             path=data_path,
