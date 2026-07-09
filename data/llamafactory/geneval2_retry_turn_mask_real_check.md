@@ -1,7 +1,7 @@
 # GenEval2 Real Turn Mask Check
 
 - Dataset: `geneval2_retry_masked_multiturn_sft_train`
-- Model/tokenizer: `/root/private_data/agentic_image/models/Qwen3-VL-8B-Instruct`
+- Model/tokenizer: `/home/develop/biocloudplantform/xxr/models/Qwen3-VL-8B-Instruct`
 - Template: `qwen3_vl_nothink`
 - Cutoff length: `32768`
 - Raw rows: `179`

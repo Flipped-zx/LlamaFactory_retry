@@ -33,7 +33,7 @@ from llamafactory.data.processor.processor_utils import infer_seqlen  # noqa: E4
 from llamafactory.extras.constants import IGNORE_INDEX  # noqa: E402
 
 
-MODEL_PATH = os.getenv("GENEVAL2_MODEL_PATH", "/root/private_data/agentic_image/models/Qwen3-VL-8B-Instruct")
+MODEL_PATH = os.getenv("GENEVAL2_MODEL_PATH", "/home/develop/biocloudplantform/xxr/models/Qwen3-VL-8B-Instruct")
 TEMPLATE = os.getenv("GENEVAL2_TEMPLATE", "qwen3_vl_nothink")
 DATASET_NAME = "geneval2_retry_masked_multiturn_sft_train"
 DATA_PATH = REPO_ROOT / "data/llamafactory/geneval2_retry_masked_multiturn_sft_train.jsonl"
